@@ -14,6 +14,7 @@ from pathlib import Path
 from ssl import PROTOCOL_TLS_SERVER, SSLContext
 from threading import Thread
 from typing import TYPE_CHECKING
+import ssl
 from urllib.parse import urlparse
 
 from docutils import nodes
@@ -65,6 +66,15 @@ class HttpsServerThread(HttpServerThread):
     def __init__(self, handler: type[BaseRequestHandler], *, port: int = 0) -> None:
         super().__init__(handler, port=port)
         sslcontext = SSLContext(PROTOCOL_TLS_SERVER)
+        # Restrict protocols to TLS 1.2 and above.
+        if hasattr(sslcontext, "minimum_version") and hasattr(ssl, "TLSVersion"):
+            sslcontext.minimum_version = ssl.TLSVersion.TLSv1_2
+        else:
+            # Fallback for older Python versions: disable TLS 1.0 and 1.1 explicitly.
+            for opt_name in ("OP_NO_TLSv1", "OP_NO_TLSv1_1"):
+                opt = getattr(ssl, opt_name, 0)
+                if opt:
+                    sslcontext.options |= opt
         sslcontext.load_cert_chain(CERT_FILE)
         self.server.socket = sslcontext.wrap_socket(
             self.server.socket, server_side=True
